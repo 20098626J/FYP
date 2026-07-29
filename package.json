@@ -10,6 +10,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@turf/bbox": "^7.3.5",
+    "@turf/boolean-point-in-polygon": "^7.3.5",
     "axios": "^1.15.1",
     "cheerio": "^1.2.0",
     "cors": "^2.8.6",
