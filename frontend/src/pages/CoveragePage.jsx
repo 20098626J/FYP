@@ -13,6 +13,12 @@ function coverageColour(pct) {
   return '#E07A5F'
 }
 
+// Title-case a name stored in upper case (e.g. "NORTH CITY" -> "North City").
+function titleCase(name) {
+  if (!name) return ''
+  return name.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
 const coverageData = {
   'Kerry':      { coverage: 95, band: '90-100%' },
   'Tipperary':  { coverage: 95, band: '90-100%' },
@@ -61,9 +67,15 @@ export default function CoveragePage() {
   const popup = useRef(new mapboxgl.Popup({ closeButton: false, closeOnClick: false }))
   const marker = useRef(null)
 
-  // Result of the most recent point lookup (click on the map).
+  // Result of the most recent point lookup (click on the map) or search select.
   const [lookup, setLookup] = useState(null)      // { division, lat, lng }
   const [lookupStatus, setLookupStatus] = useState('idle') // idle | loading | notfound | error
+
+  // Search box state (typeahead over electoral-division names).
+  const [query, setQuery] = useState('')
+  const [suggestions, setSuggestions] = useState([])
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [searching, setSearching] = useState(false)
 
   // Query the coverage endpoint for the electoral division at a clicked point.
   async function lookupPoint(lng, lat) {
@@ -89,6 +101,45 @@ export default function CoveragePage() {
       }
     }
   }
+
+  // Fill the panel and move the map to a division chosen from the search list.
+  // The search result already carries the coverage figures, so no extra request
+  // is needed — we drop a pin at the division's centre and fly to its bounds.
+  function selectDivision(d) {
+    setLookup({ lat: d.center.lat, lng: d.center.lng, division: d })
+    setLookupStatus('done')
+
+    if (!marker.current) {
+      marker.current = new mapboxgl.Marker({ color: '#1565C0' })
+    }
+    marker.current.setLngLat([d.center.lng, d.center.lat]).addTo(map.current)
+
+    map.current.fitBounds(
+      [[d.bbox.minx, d.bbox.miny], [d.bbox.maxx, d.bbox.maxy]],
+      { padding: 80, maxZoom: 13, duration: 800 },
+    )
+
+    setQuery(titleCase(d.ed_name))
+    setSuggestions([])
+    setShowDropdown(false)
+  }
+
+  // Debounced typeahead: fetch matching divisions ~250ms after typing stops.
+  useEffect(() => {
+    const q = query.trim()
+    if (q.length < 2) {
+      setSuggestions([])
+      return
+    }
+    const timer = setTimeout(() => {
+      setSearching(true)
+      axios.get(`${API}/api/coverage/search`, { params: { q } })
+        .then((res) => setSuggestions(res.data.results || []))
+        .catch(() => setSuggestions([]))
+        .finally(() => setSearching(false))
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [query])
 
   useEffect(() => {
   if (map.current) return
@@ -217,8 +268,9 @@ export default function CoveragePage() {
     </h1>
     <p style={{ color: '#5C5C5C', marginBottom: '32px', fontSize: '15px' }}>
       Full fibre (FTTP) broadband coverage across Ireland by county.
-      Hover over a county for the regional overview, or <strong>click any point</strong> to
-      see the exact electoral division and its gigabit coverage. Data source: ComReg.
+      <strong> Search for your area</strong> or <strong>click any point</strong> to see the
+      exact electoral division and its gigabit coverage; hover a county for the
+      regional overview. Data source: ComReg.
     </p>
 
     <div style={{ position: 'relative', width: '100%', height: '600px', borderRadius: '12px', overflow: 'hidden', border: '1px solid #E8E0D5' }}>
@@ -226,6 +278,78 @@ export default function CoveragePage() {
         ref={mapContainer}
         style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 }}
       />
+
+      {/* Search box with live dropdown */}
+      <div style={{ position: 'absolute', top: 16, left: 16, width: 300, zIndex: 5 }}>
+        <input
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setShowDropdown(true) }}
+          onFocus={() => { if (suggestions.length) setShowDropdown(true) }}
+          onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+          placeholder="Search your electoral division or county…"
+          style={{
+            width: '100%',
+            boxSizing: 'border-box',
+            padding: '11px 14px',
+            fontSize: 14,
+            border: '1px solid #E8E0D5',
+            borderRadius: 10,
+            backgroundColor: '#fff',
+            color: '#2C2C2C',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.10)',
+            outline: 'none',
+          }}
+        />
+
+        {showDropdown && query.trim().length >= 2 && (
+          <div style={{
+            marginTop: 6,
+            backgroundColor: '#fff',
+            border: '1px solid #E8E0D5',
+            borderRadius: 10,
+            boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+            overflow: 'hidden',
+            maxHeight: 280,
+            overflowY: 'auto',
+          }}>
+            {searching && suggestions.length === 0 && (
+              <div style={{ padding: '12px 14px', fontSize: 13, color: '#9E9E9E' }}>Searching…</div>
+            )}
+            {!searching && suggestions.length === 0 && (
+              <div style={{ padding: '12px 14px', fontSize: 13, color: '#9E9E9E' }}>No matching areas</div>
+            )}
+            {suggestions.map((d) => (
+              <button
+                key={d.id}
+                // onMouseDown fires before the input's onBlur, so the click
+                // registers before the dropdown is hidden.
+                onMouseDown={() => selectDivision(d)}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: 10,
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: '10px 14px',
+                  border: 'none',
+                  borderTop: '1px solid #F0EBE3',
+                  backgroundColor: '#fff',
+                  cursor: 'pointer',
+                  fontSize: 14,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#FAF8F5' }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#fff' }}
+              >
+                <span style={{ color: '#2C2C2C', fontWeight: 500 }}>{titleCase(d.ed_name)}</span>
+                <span style={{ color: '#7A6F65', fontSize: 12, whiteSpace: 'nowrap' }}>
+                  Co. {titleCase(d.county)} · {d.gigabit_pct ?? '—'}%
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Point-lookup result panel */}
       <div style={{

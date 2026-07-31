@@ -72,6 +72,57 @@ router.get('/counties', async (req, res) => {
   }
 });
 
+// GET /api/coverage/search?q=cla&limit=8
+// Typeahead over electoral-division names (and county) for the map search box.
+// Returns each match's coverage figures plus its bounding box and centre, so
+// the client can both fill the result panel and fly the map to the division
+// without a second request.
+router.get('/search', async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    if (q.length < 2) {
+      return res.json({ count: 0, query: q, results: [] });
+    }
+    const limit = Math.min(parseInt(req.query.limit, 10) || 8, 20);
+
+    // Escape LIKE wildcards so a stray % or _ can't widen the match.
+    const escaped = q.replace(/[\\%_]/g, '\\$&');
+    const contains = `%${escaped}%`;
+    const prefix = `${escaped}%`;
+
+    const rows = await db('electoral_divisions')
+      .select(
+        'id', 'ed_id', 'ed_name', 'county', 'premises',
+        'gigabit_pct', 'gigabit_nbi_pct', 'gigabit_active_pct',
+        'bbox_minx', 'bbox_miny', 'bbox_maxx', 'bbox_maxy',
+      )
+      .where((qb) => {
+        qb.whereRaw('ed_name ILIKE ?', [contains]).orWhereRaw('county ILIKE ?', [contains]);
+      })
+      // Surface prefix matches ("clad…" -> Claddagh) ahead of mid-word ones.
+      .orderByRaw('(ed_name ILIKE ?) DESC, ed_name ASC', [prefix])
+      .limit(limit);
+
+    const results = rows.map((r) => ({
+      id: r.id,
+      ed_id: r.ed_id,
+      ed_name: r.ed_name,
+      county: r.county,
+      premises: r.premises,
+      gigabit_pct: r.gigabit_pct,
+      gigabit_nbi_pct: r.gigabit_nbi_pct,
+      gigabit_active_pct: r.gigabit_active_pct,
+      bbox: { minx: r.bbox_minx, miny: r.bbox_miny, maxx: r.bbox_maxx, maxy: r.bbox_maxy },
+      center: { lng: (r.bbox_minx + r.bbox_maxx) / 2, lat: (r.bbox_miny + r.bbox_maxy) / 2 },
+    }));
+
+    res.json({ count: results.length, query: q, results });
+  } catch (error) {
+    console.error('Error searching electoral divisions:', error);
+    res.status(500).json({ error: 'Failed to search electoral divisions' });
+  }
+});
+
 // GET /api/coverage?lat=53.34&lng=-6.26
 // Returns the electoral division containing the point and its coverage figures.
 router.get('/', async (req, res) => {
