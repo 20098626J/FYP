@@ -1,0 +1,128 @@
+require('dotenv').config();
+const db = require('../../db/connection');
+const adapters = require('./adapters');
+const { partitionValid } = require('./lib/validate');
+
+// Plan ingestion orchestrator.
+//
+// For each registered provider adapter it: fetches plans, validates them
+// against the shared schema, and (unless --dry-run) writes the valid ones to
+// the database. Writes are guarded — a provider whose fetch fails or yields no
+// valid plans is skipped, leaving its existing rows untouched, so a broken
+// source can never wipe good data.
+//
+// Usage:
+//   node scripts/ingest/run.js               fetch live and write
+//   node scripts/ingest/run.js --dry-run     fetch and validate only, no writes
+//   node scripts/ingest/run.js --fixture     use saved fixtures where supported
+//   node scripts/ingest/run.js --provider=Eir   limit to one provider
+
+function parseArgs(argv) {
+  const opts = { dryRun: false, fixture: false, provider: null };
+  for (const arg of argv) {
+    if (arg === '--dry-run') opts.dryRun = true;
+    else if (arg === '--fixture') opts.fixture = true;
+    else if (arg.startsWith('--provider=')) opts.provider = arg.split('=')[1];
+  }
+  return opts;
+}
+
+// Resolve provider/technology names to ids, then replace this provider's plans
+// with the freshly validated set inside a transaction. Only called when there
+// is at least one valid plan, so a bad run never empties the table.
+async function writeProvider(providerName, plans) {
+  const provider = await db('providers').where({ name: providerName }).first();
+  if (!provider) throw new Error(`provider "${providerName}" not in providers table`);
+
+  const rows = [];
+  for (const p of plans) {
+    const tech = await db('technologies').where({ name: p.technologyName }).first();
+    if (!tech) throw new Error(`technology "${p.technologyName}" not in technologies table`);
+    rows.push({
+      provider_id: provider.id,
+      technology_id: tech.id,
+      plan_name: p.planName,
+      download_speed: p.downloadSpeed,
+      upload_speed: p.uploadSpeed,
+      monthly_price: p.monthlyPrice,
+      setup_fee: p.setupFee ?? 0,
+      contract_length: p.contractLength ?? null,
+      price_notes: p.priceNotes ?? null,
+      updated_at: new Date(),
+    });
+  }
+
+  await db.transaction(async (trx) => {
+    // Replace wholesale so plans withdrawn by the provider don't linger.
+    await trx('plans').where({ provider_id: provider.id }).del();
+    await trx('plans').insert(rows);
+  });
+
+  return rows.length;
+}
+
+async function run() {
+  const opts = parseArgs(process.argv.slice(2));
+  const selected = opts.provider
+    ? adapters.filter((a) => a.providerName.toLowerCase() === opts.provider.toLowerCase())
+    : adapters;
+
+  if (selected.length === 0) {
+    console.error(`No adapter matches --provider=${opts.provider}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log(`Plan ingestion${opts.dryRun ? ' (dry run — no writes)' : ''}`);
+  console.log('─'.repeat(60));
+
+  const summary = [];
+
+  for (const adapter of selected) {
+    const label = `${adapter.providerName} [${adapter.tier}]`;
+    try {
+      const fetched = await adapter.fetchPlans({ fixture: opts.fixture });
+      const { accepted, rejected } = partitionValid(fetched);
+
+      console.log(`\n${label}`);
+      console.log(`  fetched ${fetched.length}, valid ${accepted.length}, rejected ${rejected.length}`);
+      for (const r of rejected) {
+        console.log(`    ✗ "${r.plan.planName || '(no name)'}": ${r.errors.join('; ')}`);
+      }
+      for (const p of accepted) {
+        console.log(`    ✓ ${p.planName} — ${p.downloadSpeed}Mb, €${p.monthlyPrice}, ${p.contractLength ?? '—'}mo  [${p.source}]`);
+      }
+
+      if (accepted.length === 0) {
+        console.log('  → no valid plans; existing data left untouched');
+        summary.push({ label, status: 'skipped (0 valid)', written: 0 });
+        continue;
+      }
+
+      if (opts.dryRun) {
+        summary.push({ label, status: 'validated (dry run)', written: 0 });
+      } else {
+        const written = await writeProvider(adapter.providerName, accepted);
+        console.log(`  → wrote ${written} plans`);
+        summary.push({ label, status: 'written', written });
+      }
+    } catch (err) {
+      console.log(`\n${label}`);
+      console.log(`  ✗ failed: ${err.message}`);
+      console.log('  → existing data left untouched');
+      summary.push({ label, status: `failed: ${err.message}`, written: 0 });
+    }
+  }
+
+  console.log(`\n${'─'.repeat(60)}\nSummary`);
+  for (const s of summary) {
+    console.log(`  ${s.label.padEnd(28)} ${s.status}`);
+  }
+}
+
+run()
+  .catch((e) => {
+    console.error('Ingestion crashed:', e.message);
+    process.exitCode = 1;
+  })
+  .finally(() => db.destroy());
