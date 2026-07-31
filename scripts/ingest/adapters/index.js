@@ -10,4 +10,6 @@
 module.exports = [
   require('./eir'),
   require('./sky'),
+  require('./virgin-media'),
+  require('./vodafone'),
 ];

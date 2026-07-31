@@ -8,7 +8,7 @@
 
 const PROVIDER = 'Sky Ireland';
 const TECHNOLOGY = 'Fiber';
-const VERIFIED_ON = '2026-07-28';
+const VERIFIED_ON = '2026-04-21';
 const SOURCE_URL = 'https://www.sky.com/ie/broadband';
 
 const CURATED = [
