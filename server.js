@@ -24,6 +24,7 @@ const plansRoutes = require('./routes/plans');
 const technologiesRoutes = require('./routes/technologies');
 const statsRoutes = require('./routes/stats');
 const coverageRoutes = require('./routes/coverage');
+const recommendRoutes = require('./routes/recommend');
 
 
 //Root route
@@ -48,6 +49,7 @@ app.use('/api/plans', plansRoutes);
 app.use('/api/technologies', technologiesRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/coverage', coverageRoutes);
+app.use('/api/recommend', recommendRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -82,6 +84,7 @@ app.listen(PORT, () => {
   console.log(`   GET  /api/stats`);
   console.log(`   GET  /api/stats/:id`);
   console.log(`   GET  /api/coverage?lat=X&lng=Y`);
+  console.log(`   GET  /api/recommend?use=X&household=Y&county=Z`);
 
 
   console.log(`\n Try: http://localhost:${PORT}/api/providers/search?county=Dublin&town=Dublin%20City`);
