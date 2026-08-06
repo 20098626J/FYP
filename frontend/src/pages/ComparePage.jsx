@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 import { useSearchParams } from 'react-router-dom'
+import { provenanceLabel } from '../utils/provenance'
 
 const API = import.meta.env.VITE_API_URL
 
@@ -330,6 +331,14 @@ function PlanCard({ plan, badge }) {
         {plan.price_notes && (
           <div style={{ color: '#C4622D', fontSize: '11px', marginTop: '6px' }}>
             ⚠ {plan.price_notes}
+          </div>
+        )}
+        {provenanceLabel(plan) && (
+          <div
+            title={plan.source_url || undefined}
+            style={{ color: '#9E9E9E', fontSize: '11px', marginTop: '8px' }}
+          >
+            🕓 {provenanceLabel(plan)}
           </div>
         )}
       </div>

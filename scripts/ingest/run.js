@@ -48,6 +48,10 @@ async function writeProvider(providerName, plans) {
       setup_fee: p.setupFee ?? 0,
       contract_length: p.contractLength ?? null,
       price_notes: p.priceNotes ?? null,
+      // Provenance: where this plan came from and when we fetched it.
+      source: p.source ?? null,
+      source_url: p.sourceUrl ?? null,
+      fetched_at: new Date(),
       updated_at: new Date(),
     });
   }

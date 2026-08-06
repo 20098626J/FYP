@@ -1,6 +1,7 @@
 import { useNavigate, Link } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import axios from 'axios'
+import { provenanceLabel } from '../utils/provenance'
 
 const API = import.meta.env.VITE_API_URL
 
@@ -287,6 +288,11 @@ export default function RecommendPage() {
                       </div>
                     </div>
                     <p style={{ fontSize: 13, color: '#5C5C5C', lineHeight: 1.5, margin: '10px 0 0' }}>{p.rationale}</p>
+                    {provenanceLabel(p) && (
+                      <div title={p.source_url || undefined} style={{ color: '#9E9E9E', fontSize: 11, marginTop: 8 }}>
+                        🕓 {provenanceLabel(p)}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
