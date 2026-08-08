@@ -25,11 +25,11 @@ test('recommended speed is monotonic in load', () => {
 });
 
 test('need matches the documented sum for a known input', () => {
-  // streaming (4K = 15) × 1 active user + 10 baseline, then ×1.2 headroom.
-  const expected = Math.round((BASE_OVERHEAD + 1 * 15) * HEADROOM); // (10+15)*1.2 = 30
+  // streaming (FCC 4K = 25) × 1 active user + 10 baseline, then ×1.2 headroom.
+  const expected = Math.round((BASE_OVERHEAD + 1 * 25) * HEADROOM); // (10+25)*1.2 = 42
   const need = computeNeed({ use: 'streaming', household: '1' });
   assert.equal(need.recommendedMbps, expected);
-  assert.equal(need.recommendedMbps, 30);
+  assert.equal(need.recommendedMbps, 42);
   // breakdown parts sum to the headroomed total.
   const summed = need.breakdown.reduce((s, b) => s + b.mbps, 0);
   assert.equal(summed, need.recommendedMbps);

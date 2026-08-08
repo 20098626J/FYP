@@ -9,23 +9,30 @@
 // The functions here are pure (plans are passed in, not queried) so the logic
 // can be unit-tested without a database — see recommendation.test.js.
 
-// Sustained bandwidth per activity, in Mbps, from the providers' own guidance.
-// These are the citable figures; SOURCES lists where each comes from.
+// Sustained bandwidth per activity, in Mbps. Anchored to the FCC Broadband
+// Speed Guide — a published government reference table — so every figure is
+// citable rather than assumed. Cloud gaming, which the FCC doesn't list, uses
+// the platforms' own published specs. SOURCES records where each comes from.
 const RATES = {
-  stream4k: 15,     // Netflix UHD
-  streamHd: 5,      // Netflix HD
-  videoCall: 4,     // Zoom / Teams 1080p group call
+  stream4k: 25,     // FCC: 4K / UHD video
+  streamHd: 5,      // FCC: HD video (guide gives 5–8 Mbps; we use the lower bound)
+  videoCall: 6,     // FCC: HD video teleconferencing
   cloudGaming: 45,  // NVIDIA GeForce NOW 4K / Xbox Cloud Gaming, top tier
-  onlineGaming: 5,  // console/PC multiplayer session — latency-bound, low bandwidth
-  browsing: 3,      // web, social, email
+  onlineGaming: 4,  // FCC: online multiplayer — latency-bound, low bandwidth
+  browsing: 1,      // FCC: web browsing, email, social media
 };
 
 const SOURCES = [
-  { claim: '4K / UHD video stream ≈ 15 Mbps', source: 'Netflix Help Centre — Internet speed recommendations' },
-  { claim: 'HD (1080p) video stream ≈ 5 Mbps', source: 'Netflix Help Centre' },
-  { claim: 'HD video call ≈ 3–4 Mbps', source: 'Zoom & Microsoft Teams bandwidth guides' },
-  { claim: 'Cloud gaming (4K) ≈ 45 Mbps', source: 'NVIDIA GeForce NOW / Xbox Cloud Gaming requirements' },
-  { claim: 'Online multiplayer ≈ 1–5 Mbps (latency matters, not speed)', source: 'Console maker network guides' },
+  {
+    claim: 'Per-activity minimums — 4K 25, HD 5–8, HD video call 6, online multiplayer 4, browsing 1 Mbps',
+    source: 'FCC Broadband Speed Guide',
+    url: 'https://www.fcc.gov/consumers/guides/broadband-speed-guide',
+  },
+  {
+    claim: 'Cloud gaming (4K) ≈ 45 Mbps',
+    source: 'NVIDIA GeForce NOW / Xbox Cloud Gaming system requirements',
+    url: 'https://www.nvidia.com/en-us/geforce-now/system-reqs/',
+  },
 ];
 
 // Whole-home overhead: OS/app updates, smart-home devices, backups.
