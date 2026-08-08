@@ -67,6 +67,26 @@ test('over-budget request flags a note instead of hiding everything', () => {
   assert.ok(budgetNote, 'explains that nothing was within budget');
 });
 
+test('FCC household-guide cross-check is attached and mapped correctly', () => {
+  const need = computeNeed({ use: 'streaming', household: '2-3' });
+  assert.equal(need.fcc.usageLevel, 'moderate');
+  assert.equal(need.fcc.devices, 3);
+  assert.equal(need.fcc.band, 'Medium');
+  assert.equal(need.fcc.rangeMin, 12);
+  assert.equal(need.fcc.rangeMax, 25);
+});
+
+test('FCC cross-check flags the agreement direction', () => {
+  // browsing/1 ≈ 13 Mbps sits above the FCC Basic band (3–8).
+  const light = computeNeed({ use: 'browsing', household: '1' });
+  assert.equal(light.fcc.band, 'Basic');
+  assert.equal(light.fcc.agreement, 'above');
+  // all/4+ is well inside the open-ended Advanced band (25+).
+  const heavy = computeNeed({ use: 'all', household: '4+' });
+  assert.equal(heavy.fcc.band, 'Advanced');
+  assert.equal(heavy.fcc.agreement, 'within');
+});
+
 test('recommend() returns need, plans and sources together', () => {
   const out = recommend({ use: 'all', household: '4+' }, PLANS);
   assert.ok(out.need.recommendedMbps > 0);

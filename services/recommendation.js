@@ -35,6 +35,33 @@ const SOURCES = [
   },
 ];
 
+// FCC Household Broadband Guide — recommended service tier by usage level and
+// number of users/devices. We use this as an independent cross-check on our
+// itemised estimate: two published-guidance angles on the same question.
+// Bands: Basic 3–8, Medium 12–25, Advanced 25+ Mbps.
+const FCC_BANDS = {
+  basic: { label: 'Basic', min: 3, max: 8 },
+  medium: { label: 'Medium', min: 12, max: 25 },
+  advanced: { label: 'Advanced', min: 25, max: null },
+};
+
+const FCC_MATRIX = {
+  //          1 device   2          3           4
+  light: { 1: 'basic', 2: 'basic', 3: 'medium', 4: 'medium' },
+  moderate: { 1: 'basic', 2: 'medium', 3: 'medium', 4: 'advanced' },
+  // FCC lists the 2-device "high" cell as "Medium/Advanced"; we take the higher.
+  high: { 1: 'medium', 2: 'advanced', 3: 'advanced', 4: 'advanced' },
+};
+
+// Map our usage types onto the FCC's light / moderate / high levels.
+const USE_TO_FCC_LEVEL = {
+  browsing: 'light',
+  streaming: 'moderate',
+  wfh: 'moderate',
+  gaming: 'moderate',
+  all: 'high',
+};
+
 // Whole-home overhead: OS/app updates, smart-home devices, backups.
 const BASE_OVERHEAD = 10;
 // Safety margin so a line isn't sized to its exact theoretical peak.
@@ -68,6 +95,39 @@ function concurrentUsers(household) {
 function smallestTierAtLeast(mbps) {
   for (const t of TIERS) if (t >= mbps) return t;
   return TIERS[TIERS.length - 1];
+}
+
+// The FCC matrix axis is total users/devices (not simultaneous), so we map each
+// household bucket to the upper bound of its range, capped at the matrix's 4.
+function fccDeviceColumn(household) {
+  if (household === '2-3') return 3;
+  if (household === '4+') return 4;
+  const n = parseInt(household, 10);
+  if (Number.isFinite(n) && n > 0) return Math.min(4, n);
+  return 1;
+}
+
+// Look up the FCC Household Broadband Guide band for this profile and compare
+// it with our itemised estimate. `use` is already normalised to a basket key.
+function fccGuidance(use, household, recommendedMbps) {
+  const level = USE_TO_FCC_LEVEL[use] || 'light';
+  const devices = fccDeviceColumn(household);
+  const band = FCC_BANDS[FCC_MATRIX[level][devices]];
+  const rangeText = band.max ? `${band.min}–${band.max} Mbps` : `${band.min}+ Mbps`;
+
+  let agreement = 'within';
+  if (recommendedMbps < band.min) agreement = 'below';
+  else if (band.max != null && recommendedMbps > band.max) agreement = 'above';
+
+  return {
+    usageLevel: level,
+    devices,
+    band: band.label,
+    rangeMin: band.min,
+    rangeMax: band.max,
+    summary: `FCC guidance for a ${level}-use home with ${devices} ${devices === 1 ? 'device' : 'devices'}: ${band.label} (${rangeText}).`,
+    agreement, // how our estimate sits relative to the FCC band: within | above | below
+  };
 }
 
 // Extra, non-required guidance per usage type (kept out of the hard number).
@@ -109,6 +169,8 @@ function computeNeed(input) {
     concurrent,
     breakdown,
     notes: usageNotes(use),
+    // Independent authoritative cross-check on the itemised figure above.
+    fcc: fccGuidance(use, input.household, withHeadroom),
   };
 }
 
