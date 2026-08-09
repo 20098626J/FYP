@@ -29,11 +29,32 @@ const SOURCES = [
     url: 'https://www.fcc.gov/consumers/guides/broadband-speed-guide',
   },
   {
+    claim: 'Recommended speed by number of users/devices and usage level (our cross-check)',
+    source: 'FCC Household Broadband Guide',
+    url: 'https://www.fcc.gov/consumers/guides/household-broadband-guide',
+  },
+  {
     claim: 'Cloud gaming (4K) ≈ 45 Mbps',
     source: 'NVIDIA GeForce NOW / Xbox Cloud Gaming system requirements',
     url: 'https://www.nvidia.com/en-us/geforce-now/system-reqs/',
   },
+  {
+    claim: 'Irish context — the average home used ~563 GB/month in Q4 2025',
+    source: 'ComReg — Electronic Communications Sector Quarterly Report',
+    url: 'https://www.comreg.ie/comreg-issues-electronic-communications-sector-quarterly-report-for-q4-2025/',
+  },
+  {
+    claim: 'Irish context — 95% of households have internet, with high smart-device adoption',
+    source: 'CSO — Internet Coverage and Usage in Ireland 2025',
+    url: 'https://www.cso.ie/en/releasesandpublications/ep/p-isshict/internetcoverageandusageinireland2025/keyfindings/',
+  },
 ];
+
+// The FCC states its guides are "rough guidelines … not based on surveys or
+// experiments." We size generously with headroom on top, so this is a starting
+// point, not a precise measurement — surfaced in the UI for honesty.
+const DISCLAIMER =
+  'These figures come from published guidance (the FCC notes its guides are rough guidelines, not measurements) with added headroom. Treat them as a well-grounded starting point, not an exact requirement.';
 
 // FCC Household Broadband Guide — recommended service tier by usage level and
 // number of users/devices. We use this as an independent cross-check on our
@@ -230,7 +251,7 @@ function rankPlans(need, plans, options = {}) {
 function recommend(input, plans, coverage = null) {
   const need = computeNeed(input);
   const { picks, budgetNote } = rankPlans(need, plans, { budget: input.budget ?? null });
-  return { need, plans: picks, budgetNote, coverage, sources: SOURCES };
+  return { need, plans: picks, budgetNote, coverage, sources: SOURCES, disclaimer: DISCLAIMER };
 }
 
 module.exports = {

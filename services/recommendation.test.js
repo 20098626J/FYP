@@ -92,4 +92,5 @@ test('recommend() returns need, plans and sources together', () => {
   assert.ok(out.need.recommendedMbps > 0);
   assert.ok(Array.isArray(out.plans) && out.plans.length > 0);
   assert.ok(Array.isArray(out.sources) && out.sources.length > 0);
+  assert.ok(typeof out.disclaimer === 'string' && out.disclaimer.length > 0);
 });

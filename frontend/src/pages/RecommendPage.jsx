@@ -44,6 +44,14 @@ function coverageVerdict(pct, preferFttp) {
   }
 }
 
+// Plain-English phrasing for how our estimate compares with the FCC band.
+function agreementPhrase(agreement) {
+  if (agreement === 'within') return 'sits comfortably within'
+  if (agreement === 'above') return 'is a little above (we add extra headroom)'
+  if (agreement === 'below') return 'is below'
+  return 'compares with'
+}
+
 const toneColour = { good: '#1a9850', ok: '#C4622D', warn: '#C0392B', neutral: '#7A6F65' }
 const tagLabel = { 'best-match': 'Best match', 'best-value': 'Best value', 'most-headroom': 'Most future-proof' }
 const tagColour = { 'best-match': '#C4622D', 'best-value': '#1a9850', 'most-headroom': '#1565C0' }
@@ -238,6 +246,18 @@ export default function RecommendPage() {
                   </div>
                 </div>
 
+                {/* Independent FCC cross-check */}
+                {rec.need.fcc && (
+                  <div style={{ backgroundColor: '#F4F7FB', border: '1px solid #D6E2F0', borderRadius: 8, padding: '12px 16px', marginBottom: 16 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#1565C0', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+                      Cross-checked with FCC guidance
+                    </div>
+                    <p style={{ fontSize: 13, color: '#5C5C5C', lineHeight: 1.6, margin: 0 }}>
+                      {rec.need.fcc.summary} Your ~{rec.need.recommendedMbps} Mbps estimate {agreementPhrase(rec.need.fcc.agreement)} that band.
+                    </p>
+                  </div>
+                )}
+
                 {/* Caveats */}
                 {rec.need.notes.map((note, i) => (
                   <p key={i} style={{ fontSize: 13, color: '#7A6F65', lineHeight: 1.6, margin: '0 0 8px', paddingLeft: 14, borderLeft: '2px solid #E8E0D5' }}>
@@ -304,9 +324,19 @@ export default function RecommendPage() {
                 </summary>
                 <ul style={{ margin: '10px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
                   {rec.sources.map((s, i) => (
-                    <li key={i}><strong>{s.claim}</strong> — <span style={{ color: '#7A6F65' }}>{s.source}</span></li>
+                    <li key={i}>
+                      <strong>{s.claim}</strong> —{' '}
+                      {s.url
+                        ? <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ color: '#C4622D' }}>{s.source}</a>
+                        : <span style={{ color: '#7A6F65' }}>{s.source}</span>}
+                    </li>
                   ))}
                 </ul>
+                {rec.disclaimer && (
+                  <p style={{ marginTop: 10, fontSize: 12, color: '#9E9E9E', lineHeight: 1.6, fontStyle: 'italic' }}>
+                    {rec.disclaimer}
+                  </p>
+                )}
               </details>
 
               <button onClick={handleViewPlans} style={{
