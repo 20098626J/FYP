@@ -1,0 +1,54 @@
+name: Refresh broadband plans
+
+# Automatically re-runs the plan ingestion pipeline so the catalogue — and the
+# "updated X ago" provenance shown on the cards — stays fresh without anyone
+# running a script by hand. Runs nightly, and can be triggered manually from the
+# Actions tab (handy for a live demo).
+#
+# Setup required once, in the GitHub repo settings:
+#   - Add a secret named DATABASE_URL (same Postgres connection string as .env).
+#   - The RDS instance must be reachable from GitHub-hosted runners
+#     (publicly accessible + security group allowing the runner, or a self-hosted
+#     runner inside your VPC).
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # 03:00 UTC daily
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (validate only, no database writes)'
+        type: boolean
+        default: false
+
+# Never let two ingestion runs write to the database at the same time.
+concurrency:
+  group: ingest-plans
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          # The ingestion path uses axios + cheerio, not Puppeteer, so skip the
+          # heavy Chromium download to keep the run fast.
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 'true'
+
+      - name: Run ingestion pipeline
+        run: node scripts/ingest/run.js ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--dry-run' || '' }}
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
