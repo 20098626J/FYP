@@ -9,7 +9,12 @@ router.get('/', async (req, res) => {
       providers: await db('providers').count('* as count').first(),
       plans: await db('plans').count('* as count').first(),
       locations: await db('locations').count('* as count').first(),
-      counties: await db('locations').distinct('county').then(r => r.length),
+      // Count counties from the coverage dataset (all 26), not the sparse
+      // locations sample, so the headline reflects real coverage breadth.
+      counties: await db('electoral_divisions')
+        .whereNotNull('county')
+        .distinct('county')
+        .then(r => r.length),
       
       avgPrice: await db('plans').avg('monthly_price as avg').first(),
       minPrice: await db('plans').min('monthly_price as min').first(),
