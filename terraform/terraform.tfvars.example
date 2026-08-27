@@ -1,0 +1,16 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+
+aws_region = "eu-west-1"
+
+# Required — the Postgres master password.
+db_password = "change-me-to-a-strong-password"
+
+# Optional — SSH access to the backend instance.
+# ssh_key_name     = "my-existing-keypair"
+# ssh_ingress_cidr = "203.0.113.4/32"   # your public IP
+
+# Optional — let external clients reach RDS directly.
+# Add your IP for local dev, and/or 0.0.0.0/0 so GitHub-hosted Action runners can
+# reach it for the nightly ingestion (open to the internet — password-protected,
+# but consider a self-hosted runner or the in-process cron instead).
+# db_extra_ingress_cidrs = ["203.0.113.4/32"]
