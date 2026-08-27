@@ -6,12 +6,13 @@ const { partitionValid } = require('./lib/validate');
 // Plan ingestion orchestrator.
 //
 // For each registered provider adapter it: fetches plans, validates them
-// against the shared schema, and (unless --dry-run) writes the valid ones to
-// the database. Writes are guarded — a provider whose fetch fails or yields no
-// valid plans is skipped, leaving its existing rows untouched, so a broken
-// source can never wipe good data.
+// against the shared schema, and (unless dryRun) writes the valid ones to the
+// database. Writes are guarded — a provider whose fetch fails or yields no valid
+// plans is skipped, leaving its existing rows untouched, so a broken source can
+// never wipe good data.
 //
-// Usage:
+// The core is exported as runIngestion() so it can be called in-process (e.g.
+// the server's scheduled job) as well as from the command line:
 //   node scripts/ingest/run.js               fetch live and write
 //   node scripts/ingest/run.js --dry-run     fetch and validate only, no writes
 //   node scripts/ingest/run.js --fixture     use saved fixtures where supported
@@ -65,19 +66,21 @@ async function writeProvider(providerName, plans) {
   return rows.length;
 }
 
-async function run() {
-  const opts = parseArgs(process.argv.slice(2));
-  const selected = opts.provider
-    ? adapters.filter((a) => a.providerName.toLowerCase() === opts.provider.toLowerCase())
+// Reusable orchestrator. Accepts an options object and returns a summary array.
+// Does NOT close the db connection — long-lived callers (the server) keep it
+// open; the CLI wrapper below owns teardown.
+async function runIngestion(opts = {}) {
+  const { dryRun = false, fixture = false, provider = null } = opts;
+
+  const selected = provider
+    ? adapters.filter((a) => a.providerName.toLowerCase() === provider.toLowerCase())
     : adapters;
 
   if (selected.length === 0) {
-    console.error(`No adapter matches --provider=${opts.provider}`);
-    process.exitCode = 1;
-    return;
+    throw new Error(`No adapter matches provider "${provider}"`);
   }
 
-  console.log(`Plan ingestion${opts.dryRun ? ' (dry run — no writes)' : ''}`);
+  console.log(`Plan ingestion${dryRun ? ' (dry run — no writes)' : ''}`);
   console.log('─'.repeat(60));
 
   const summary = [];
@@ -85,7 +88,7 @@ async function run() {
   for (const adapter of selected) {
     const label = `${adapter.providerName} [${adapter.tier}]`;
     try {
-      const fetched = await adapter.fetchPlans({ fixture: opts.fixture });
+      const fetched = await adapter.fetchPlans({ fixture });
       const { accepted, rejected } = partitionValid(fetched);
 
       console.log(`\n${label}`);
@@ -103,7 +106,7 @@ async function run() {
         continue;
       }
 
-      if (opts.dryRun) {
+      if (dryRun) {
         summary.push({ label, status: 'validated (dry run)', written: 0 });
       } else {
         const written = await writeProvider(adapter.providerName, accepted);
@@ -122,11 +125,18 @@ async function run() {
   for (const s of summary) {
     console.log(`  ${s.label.padEnd(28)} ${s.status}`);
   }
+
+  return summary;
 }
 
-run()
-  .catch((e) => {
-    console.error('Ingestion crashed:', e.message);
-    process.exitCode = 1;
-  })
-  .finally(() => db.destroy());
+// CLI entry point — only when run directly, not when imported by the server.
+if (require.main === module) {
+  runIngestion(parseArgs(process.argv.slice(2)))
+    .catch((e) => {
+      console.error('Ingestion crashed:', e.message);
+      process.exitCode = 1;
+    })
+    .finally(() => db.destroy());
+}
+
+module.exports = { runIngestion };

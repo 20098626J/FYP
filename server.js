@@ -26,6 +26,30 @@ const statsRoutes = require('./routes/stats');
 const coverageRoutes = require('./routes/coverage');
 const recommendRoutes = require('./routes/recommend');
 
+const cron = require('node-cron');
+const { runIngestion } = require('./scripts/ingest/run');
+
+// Scheduled auto-ingestion (in-process fallback to the GitHub Actions workflow).
+// A single run at a time — overlapping triggers are ignored — so the nightly
+// cron and any manual trigger can never write to the database concurrently.
+let ingestRunning = false;
+async function triggerIngestion(trigger) {
+  if (ingestRunning) {
+    console.log(`[ingest] ${trigger}: skipped, a run is already in progress`);
+    return;
+  }
+  ingestRunning = true;
+  console.log(`[ingest] ${trigger}: starting`);
+  try {
+    await runIngestion({});
+    console.log(`[ingest] ${trigger}: done`);
+  } catch (e) {
+    console.error(`[ingest] ${trigger}: failed —`, e.message);
+  } finally {
+    ingestRunning = false;
+  }
+}
+
 
 //Root route
 app.get('/', (req, res) => {
@@ -51,6 +75,18 @@ app.use('/api/stats', statsRoutes);
 app.use('/api/coverage', coverageRoutes);
 app.use('/api/recommend', recommendRoutes);
 
+// Manual ingestion trigger (handy for demos). Disabled unless ADMIN_TOKEN is
+// set; callers must send a matching x-admin-token header. Fire-and-forget: it
+// starts the run and returns immediately.
+app.post('/api/admin/ingest', (req, res) => {
+  const token = process.env.ADMIN_TOKEN;
+  if (!token || req.get('x-admin-token') !== token) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  triggerIngestion('manual admin trigger');
+  res.json({ status: 'ingestion started' });
+});
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
@@ -64,6 +100,18 @@ app.use((err, req, res, next) => {
     message: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
 });
+
+// Enable the nightly in-process ingestion by setting ENABLE_SCHEDULED_INGEST=true
+// (leave it off in dev/CI). INGEST_CRON overrides the schedule; default 03:00 daily.
+if (process.env.ENABLE_SCHEDULED_INGEST === 'true') {
+  const schedule = process.env.INGEST_CRON || '0 3 * * *';
+  if (cron.validate(schedule)) {
+    cron.schedule(schedule, () => triggerIngestion(`cron "${schedule}"`));
+    console.log(`Scheduled ingestion enabled: "${schedule}"`);
+  } else {
+    console.warn(`Invalid INGEST_CRON "${schedule}"; scheduled ingestion not started.`);
+  }
+}
 
 // Start server
 app.listen(PORT, () => {
